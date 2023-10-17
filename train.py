@@ -1,4 +1,3 @@
-
 from pathlib import Path
 import argparse
 import random
@@ -35,7 +34,7 @@ parser.add_argument(
 parser.add_argument(
     '--eval', action='store_true',
     help='Perform the evaluation'
-            ' (requires ground truth pose and intrinsics)')
+         ' (requires ground truth pose and intrinsics)')
 
 parser.add_argument(
     '--superglue', choices={'indoor', 'outdoor'}, default='indoor',
@@ -43,14 +42,14 @@ parser.add_argument(
 parser.add_argument(
     '--max_keypoints', type=int, default=1024,
     help='Maximum number of keypoints detected by Superpoint'
-            ' (\'-1\' keeps all keypoints)')
+         ' (\'-1\' keeps all keypoints)')
 parser.add_argument(
     '--keypoint_threshold', type=float, default=0.005,
     help='SuperPoint keypoint detector confidence threshold')
 parser.add_argument(
     '--nms_radius', type=int, default=4,
     help='SuperPoint Non Maximum Suppression (NMS) radius'
-    ' (Must be positive)')
+         ' (Must be positive)')
 parser.add_argument(
     '--sinkhorn_iterations', type=int, default=20,
     help='Number of Sinkhorn iterations performed by SuperGlue')
@@ -61,8 +60,8 @@ parser.add_argument(
 parser.add_argument(
     '--resize', type=int, nargs='+', default=[640, 480],
     help='Resize the input image before running inference. If two numbers, '
-            'resize to the exact dimensions, if one number, resize the max '
-            'dimension, if -1, do not resize')
+         'resize to the exact dimensions, if one number, resize the max '
+         'dimension, if -1, do not resize')
 parser.add_argument(
     '--resize_float', action='store_true',
     help='Resize the image after casting uint8 to float')
@@ -99,7 +98,7 @@ parser.add_argument(
 parser.add_argument(
     '--eval_output_dir', type=str, default='dump_match_pairs/',
     help='Path to the directory in which the .npz results and optional,'
-            'visualizations are written')
+         'visualizations are written')
 parser.add_argument(
     '--learning_rate', type=int, default=0.0001,
     help='Learning rate')
@@ -108,13 +107,14 @@ parser.add_argument(
     '--batch_size', type=int, default=1,
     help='batch_size')
 parser.add_argument(
-    '--train_path', type=str, default='/home/yinxinjia/yingxin/dataset/COCO2014_train/', 
+    '--num_workers', type=int, default=0,
+    help='num_workers')
+parser.add_argument(
+    '--train_path', type=str, default='/mnt/Data/COCO/train2014/',
     help='Path to the directory of training imgs.')
 parser.add_argument(
     '--epoch', type=int, default=20,
     help='Number of epoches')
-
-
 
 if __name__ == '__main__':
     opt = parser.parse_args()
@@ -130,7 +130,7 @@ if __name__ == '__main__':
     eval_output_dir = Path(opt.eval_output_dir)
     eval_output_dir.mkdir(exist_ok=True, parents=True)
     print('Will write visualization images to',
-        'directory \"{}\"'.format(eval_output_dir))
+          'directory \"{}\"'.format(eval_output_dir))
     config = {
         'superpoint': {
             'nms_radius': opt.nms_radius,
@@ -146,37 +146,38 @@ if __name__ == '__main__':
 
     # load training data
     train_set = SparseDataset(opt.train_path, opt.max_keypoints)
-    train_loader = torch.utils.data.DataLoader(dataset=train_set, shuffle=False, batch_size=opt.batch_size, drop_last=True)
+    train_loader = torch.utils.data.DataLoader(dataset=train_set, shuffle=False, batch_size=opt.batch_size,
+                                               num_workers=opt.num_workers, drop_last=True)
 
     superglue = SuperGlue(config.get('superglue', {}))
 
     if torch.cuda.is_available():
-        superglue.cuda() # make sure it trains on GPU
+        superglue.cuda()  # make sure it trains on GPU
     else:
         print("### CUDA not available ###")
     optimizer = torch.optim.Adam(superglue.parameters(), lr=opt.learning_rate)
     mean_loss = []
 
     # start training
-    for epoch in range(1, opt.epoch+1):
+    for epoch in range(1, opt.epoch + 1):
         epoch_loss = 0
         superglue.double().train()
         for i, pred in enumerate(train_loader):
             for k in pred:
-                if k != 'file_name' and k!='image0' and k!='image1':
+                if k != 'file_name' and k != 'image0' and k != 'image1':
                     if type(pred[k]) == torch.Tensor:
                         pred[k] = Variable(pred[k].cuda())
                     else:
                         pred[k] = Variable(torch.stack(pred[k]).cuda())
-                
+
             data = superglue(pred)
             for k, v in pred.items():
                 pred[k] = v[0]
             pred = {**pred, **data}
 
-            if pred['skip_train'] == True: # image has no keypoint
+            if pred['skip_train'] == True:  # image has no keypoint
                 continue
-            
+
             # process loss
             Loss = pred['loss']
             epoch_loss += Loss.item()
@@ -187,15 +188,15 @@ if __name__ == '__main__':
             optimizer.step()
 
             # for every 50 images, print progress and visualize the matches
-            if (i+1) % 50 == 0:
-                print ('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}' 
-                    .format(epoch, opt.epoch, i+1, len(train_loader), torch.mean(torch.stack(mean_loss)).item())) 
+            if (i + 1) % 50 == 0:
+                print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'
+                      .format(epoch, opt.epoch, i + 1, len(train_loader), torch.mean(torch.stack(mean_loss)).item()))
                 mean_loss = []
 
                 ### eval ###
                 # Visualize the matches.
                 superglue.eval()
-                image0, image1 = pred['image0'].cpu().numpy()[0]*255., pred['image1'].cpu().numpy()[0]*255.
+                image0, image1 = pred['image0'].cpu().numpy()[0] * 255., pred['image1'].cpu().numpy()[0] * 255.
                 kpts0, kpts1 = pred['keypoints0'].cpu().numpy()[0], pred['keypoints1'].cpu().numpy()[0]
                 matches, conf = pred['matches0'].cpu().detach().numpy(), pred['matching_scores0'].cpu().detach().numpy()
                 image0 = read_image_modified(image0, opt.resize, opt.resize_float)
@@ -215,17 +216,15 @@ if __name__ == '__main__':
                     opt.fast_viz, opt.opencv_display, 'Matches')
 
             # process checkpoint for every 5e3 images
-            if (i+1) % 5e3 == 0:
+            if (i + 1) % 5e3 == 0:
                 model_out_path = "model_epoch_{}.pth".format(epoch)
                 torch.save(superglue, model_out_path)
-                print ('Epoch [{}/{}], Step [{}/{}], Checkpoint saved to {}' 
-                    .format(epoch, opt.epoch, i+1, len(train_loader), model_out_path)) 
+                print('Epoch [{}/{}], Step [{}/{}], Checkpoint saved to {}'
+                      .format(epoch, opt.epoch, i + 1, len(train_loader), model_out_path))
 
-        # save checkpoint when an epoch finishes
+                # save checkpoint when an epoch finishes
         epoch_loss /= len(train_loader)
         model_out_path = "model_epoch_{}.pth".format(epoch)
         torch.save(superglue, model_out_path)
         print("Epoch [{}/{}] done. Epoch Loss {}. Checkpoint saved to {}"
-            .format(epoch, opt.epoch, epoch_loss, model_out_path))
-        
-
+              .format(epoch, opt.epoch, epoch_loss, model_out_path))
