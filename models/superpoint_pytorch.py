@@ -167,6 +167,6 @@ class SuperPoint(nn.Module):
 
         return {
             "keypoints": keypoints,
-            "keypoint_scores": scores,
+            "scores": scores,
             "descriptors": descriptors,
         }

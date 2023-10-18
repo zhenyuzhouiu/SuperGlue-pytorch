@@ -110,10 +110,12 @@ class SparseDataset(Dataset):
         # obtain the matching matrix of the image pair
         matched = self.matcher.match(descs1, descs2)
         kp1_projected = cv2.perspectiveTransform(kp1_np.reshape((1, -1, 2)), M)[0, :, :]
-        dists = cdist(kp1_projected, kp2_np)
-
+        dists = cdist(kp1_projected, kp2_np)  # [n_kpts1, n_kpts2]
+        
+        # minimal indices of each column alont row
         min1 = np.argmin(dists, axis=0)
-        min2 = np.argmin(dists, axis=1)
+        # minimal indices of each row along column
+        min2 = np.argmin(dists, axis=1) 
 
         min1v = np.min(dists, axis=1)
         min1f = min2[min1v < 3]
@@ -190,8 +192,8 @@ class SuperPointDataset(Dataset):
         #     "keypoint_scores": scores,
         #     "descriptors": descriptors}
         pred = self.superpoint({'image': pair})
-        kp1, descs1, score1 = pred["keypoints"][0], pred["descriptors"][0], pred["keypoint_scores"][0]
-        kp2, descs2, score2 = pred["keypoints"][1], pred["descriptors"][1], pred["keypoint_scores"][1]
+        kp1, descs1, score1 = pred["keypoints"][0], pred["descriptors"][0], pred["scores"][0]
+        kp2, descs2, score2 = pred["keypoints"][1], pred["descriptors"][1], pred["scores"][1]
 
         # skip this image pair if no keypoints detected in image
         if len(kp1) < 1 or len(kp2) < 1:
@@ -205,7 +207,8 @@ class SuperPointDataset(Dataset):
                 'file_name': file_name
             }
         # convert tensor to numpy
-        kp1 =
+        kp1 = kp1.data.cpu().numpy()
+        kp2 = kp2.data.cpu().numpy()
 
         # obtain the matching matrix of the image pair by the keypoint location
         kp1_projected = cv2.perspectiveTransform(kp1.reshape((1, -1, 2)), M)[0, :, :]
@@ -227,9 +230,6 @@ class SuperPointDataset(Dataset):
         MN2 = np.concatenate([missing1[np.newaxis, :], (len(kp2)) * np.ones((1, len(missing1)), dtype=np.int64)])
         MN3 = np.concatenate([(len(kp1)) * np.ones((1, len(missing2)), dtype=np.int64), missing2[np.newaxis, :]])
         all_matches = np.concatenate([MN, MN2, MN3], axis=1)
-
-        image = torch.from_numpy(image / 255.).double()[None].cuda()
-        warped = torch.from_numpy(warped / 255.).double()[None].cuda()
 
         return {
             'keypoints0': list(kp1),
