@@ -53,7 +53,7 @@ def MLP(channels: list, do_bn=True):
     for i in range(1, n):
         layers.append(
             nn.Conv1d(channels[i - 1], channels[i], kernel_size=1, bias=True))
-        if i < (n-1):
+        if i < (n - 1):
             if do_bn:
                 # layers.append(nn.BatchNorm1d(channels[i]))
                 layers.append(nn.InstanceNorm1d(channels[i]))
@@ -65,7 +65,7 @@ def normalize_keypoints(kpts, image_shape):
     """ Normalize keypoints locations based on image image_shape"""
     _, _, height, width = image_shape
     one = kpts.new_tensor(1)
-    size = torch.stack([one*width, one*height])[None]
+    size = torch.stack([one * width, one * height])[None]
     center = size / 2
     scaling = size.max(1, keepdim=True).values * 0.7
     return (kpts - center[:, None, :]) / scaling[:, None, :]
@@ -73,6 +73,7 @@ def normalize_keypoints(kpts, image_shape):
 
 class KeypointEncoder(nn.Module):
     """ Joint encoding of visual appearance and location using MLPs"""
+
     def __init__(self, feature_dim, layers):
         super().__init__()
         self.encoder = MLP([3] + layers + [feature_dim])
@@ -85,13 +86,14 @@ class KeypointEncoder(nn.Module):
 
 def attention(query, key, value):
     dim = query.shape[1]
-    scores = torch.einsum('bdhn,bdhm->bhnm', query, key) / dim**.5
+    scores = torch.einsum('bdhn,bdhm->bhnm', query, key) / dim ** .5
     prob = torch.nn.functional.softmax(scores, dim=-1)
     return torch.einsum('bhnm,bdhm->bdhn', prob, value), prob
 
 
 class MultiHeadedAttention(nn.Module):
     """ Multi-head attention to increase model expressivitiy """
+
     def __init__(self, num_heads: int, d_model: int):
         super().__init__()
         assert d_model % num_heads == 0
@@ -106,14 +108,14 @@ class MultiHeadedAttention(nn.Module):
                              for l, x in zip(self.proj, (query, key, value))]
         x, prob = attention(query, key, value)
         self.prob.append(prob)
-        return self.merge(x.contiguous().view(batch_dim, self.dim*self.num_heads, -1))
+        return self.merge(x.contiguous().view(batch_dim, self.dim * self.num_heads, -1))
 
 
 class AttentionalPropagation(nn.Module):
     def __init__(self, feature_dim: int, num_heads: int):
         super().__init__()
         self.attn = MultiHeadedAttention(num_heads, feature_dim)
-        self.mlp = MLP([feature_dim*2, feature_dim*2, feature_dim])
+        self.mlp = MLP([feature_dim * 2, feature_dim * 2, feature_dim])
         nn.init.constant_(self.mlp[-1].bias, 0.0)
 
     def forward(self, x, source):
@@ -154,7 +156,7 @@ def log_optimal_transport(scores, alpha, iters: int):
     """ Perform Differentiable Optimal Transport in Log-space for stability"""
     b, m, n = scores.shape
     one = scores.new_tensor(1)
-    ms, ns = (m*one).to(scores), (n*one).to(scores)
+    ms, ns = (m * one).to(scores), (n * one).to(scores)
 
     bins0 = alpha.expand(b, m, 1)
     bins1 = alpha.expand(b, 1, n)
@@ -221,23 +223,23 @@ class SuperGlue(nn.Module):
         bin_score = torch.nn.Parameter(torch.tensor(1.))
         self.register_parameter('bin_score', bin_score)
 
-        # assert self.config['weights'] in ['indoor', 'outdoor']
-        # path = Path(__file__).parent
-        # path = path / 'weights/superglue_{}.pth'.format(self.config['weights'])
-        # self.load_state_dict(torch.load(path))
-        # print('Loaded SuperGlue model (\"{}\" weights)'.format(
-        #     self.config['weights']))
+        assert self.config['weights'] in ['indoor', 'outdoor']
+        path = Path(__file__).parent
+        path = path / 'weights/superglue_{}.pth'.format(self.config['weights'])
+        self.load_state_dict(torch.load(path))
+        print('Loaded SuperGlue model (\"{}\" weights)'.format(
+            self.config['weights']))
 
     def forward(self, data):
         """Run SuperGlue on a pair of keypoints and descriptors"""
         desc0, desc1 = data['descriptors0'].double(), data['descriptors1'].double()
         kpts0, kpts1 = data['keypoints0'].double(), data['keypoints1'].double()
 
-        desc0 = desc0.transpose(0,1)
-        desc1 = desc1.transpose(0,1)
+        desc0 = desc0.transpose(0, 1)
+        desc1 = desc1.transpose(0, 1)
         kpts0 = torch.reshape(kpts0, (1, -1, 2))
         kpts1 = torch.reshape(kpts1, (1, -1, 2))
-    
+
         if kpts0.shape[1] == 0 or kpts1.shape[1] == 0:  # no keypoints
             shape0, shape1 = kpts0.shape[:-1], kpts1.shape[:-1]
             return {
@@ -249,8 +251,8 @@ class SuperGlue(nn.Module):
             }
 
         file_name = data['file_name']
-        all_matches = data['all_matches'].permute(1,2,0) # shape=torch.Size([1, 87, 2])
-        
+        all_matches = data['all_matches'].permute(1, 2, 0)  # shape=torch.Size([1, 87, 2])
+
         # Keypoint normalization.
         kpts0 = normalize_keypoints(kpts0, data['image0'].shape)
         kpts1 = normalize_keypoints(kpts1, data['image1'].shape)
@@ -267,7 +269,7 @@ class SuperGlue(nn.Module):
 
         # Compute matching descriptor distance.
         scores = torch.einsum('bdn,bdm->bnm', mdesc0, mdesc1)
-        scores = scores / self.config['descriptor_dim']**.5
+        scores = scores / self.config['descriptor_dim'] ** .5
 
         # Run the optimal transport.
         scores = log_optimal_transport(
@@ -292,7 +294,7 @@ class SuperGlue(nn.Module):
         for i in range(len(all_matches[0])):
             x = all_matches[0][i][0]
             y = all_matches[0][i][1]
-            loss.append(-torch.log( scores[0][x][y].exp() )) # check batch size == 1 ?
+            loss.append(-torch.log(scores[0][x][y].exp()))  # check batch size == 1 ?
         # for p0 in unmatched0:
         #     loss += -torch.log(scores[0][p0][-1])
         # for p1 in unmatched1:
@@ -300,8 +302,8 @@ class SuperGlue(nn.Module):
         loss_mean = torch.mean(torch.stack(loss))
         loss_mean = torch.reshape(loss_mean, (1, -1))
         return {
-            'matches0': indices0[0], # use -1 for invalid match
-            'matches1': indices1[0], # use -1 for invalid match
+            'matches0': indices0[0],  # use -1 for invalid match
+            'matches1': indices1[0],  # use -1 for invalid match
             'matching_scores0': mscores0[0],
             'matching_scores1': mscores1[0],
             'loss': loss_mean[0],

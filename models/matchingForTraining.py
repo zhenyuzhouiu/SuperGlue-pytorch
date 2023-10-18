@@ -46,9 +46,9 @@ from .superpoint import SuperPoint
 from .superglue import SuperGlue
 
 
-
 class MatchingForTraining(torch.nn.Module):
     """ Image Matching Frontend (SuperPoint + SuperGlue) """
+
     def __init__(self, config={}):
         super().__init__()
         self.superpoint = SuperPoint(config.get('superpoint', {}))
@@ -65,10 +65,10 @@ class MatchingForTraining(torch.nn.Module):
         # Extract SuperPoint (keypoints, scores, descriptors) if not provided
         if 'keypoints0' not in data:
             pred0 = self.superpoint({'image': data['image0']})
-            pred = {**pred, **{k+'0': v for k, v in pred0.items()}}
+            pred = {**pred, **{k + '0': v for k, v in pred0.items()}}
         if 'keypoints1' not in data:
             pred1 = self.superpoint({'image': data['image1']})
-            pred = {**pred, **{k+'1': v for k, v in pred1.items()}}
+            pred = {**pred, **{k + '1': v for k, v in pred1.items()}}
 
         # Batch all features
         # We should either have i) one image per batch, or
@@ -81,7 +81,7 @@ class MatchingForTraining(torch.nn.Module):
             if isinstance(data[k], (list, tuple)):
                 data[k] = torch.stack(data[k])
                 data[k].requres_grad = True
-                
+
         # Perform the matching
         pred = {**pred, **self.superglue(data)}
         pred = {**pred, **data}
@@ -90,6 +90,5 @@ class MatchingForTraining(torch.nn.Module):
             if k == 'file_name' or k == 'skip_train':
                 continue
             pred[k].requres_grad = True
-            
-        return pred
 
+        return pred

@@ -1,25 +1,14 @@
 from pathlib import Path
 import argparse
-import random
-import numpy as np
 import matplotlib.cm as cm
-import torch
-import torch.nn as nn
 from torch.autograd import Variable
-from load_data import SparseDataset
-import os
+from data.load_data import SparseDataset
 import torch.multiprocessing
-from tqdm import tqdm
 
-from models.utils import (compute_pose_error, compute_epipolar_error,
-                          estimate_pose, make_matching_plot,
-                          error_colormap, AverageTimer, pose_auc, read_image,
-                          rotate_intrinsics, rotate_pose_inplane,
-                          scale_intrinsics, read_image_modified)
+from models.utils import (make_matching_plot,
+                          read_image_modified)
 
-from models.superpoint import SuperPoint
 from models.superglue import SuperGlue
-from models.matchingForTraining import MatchingForTraining
 
 torch.set_grad_enabled(True)
 torch.multiprocessing.set_sharing_strategy('file_system')
