@@ -112,7 +112,7 @@ class SparseDataset(Dataset):
         kp1_projected = cv2.perspectiveTransform(kp1_np.reshape((1, -1, 2)), M)[0, :, :]
         dists = cdist(kp1_projected, kp2_np)  # [n_kpts1, n_kpts2]
         
-        # minimal indices of each column alont row
+        # minimal indices of each column along row
         min1 = np.argmin(dists, axis=0)
         # minimal indices of each row along column
         min2 = np.argmin(dists, axis=1) 
@@ -126,7 +126,8 @@ class SparseDataset(Dataset):
         missing1 = np.setdiff1d(np.arange(kp1_np.shape[0]), min1[matches])
         missing2 = np.setdiff1d(np.arange(kp2_np.shape[0]), matches)
 
-        MN = np.concatenate([min1[matches][np.newaxis, :], matches[np.newaxis, :]])
+        MN = np.concatenate([min1[matches][np.newaxis, :], matches[np.newaxis, :]])  # mutual matched point
+        # for the missing point, push them to the dust bin of sinkhorn
         MN2 = np.concatenate([missing1[np.newaxis, :], (len(kp2)) * np.ones((1, len(missing1)), dtype=np.int64)])
         MN3 = np.concatenate([(len(kp1)) * np.ones((1, len(missing2)), dtype=np.int64), missing2[np.newaxis, :]])
         all_matches = np.concatenate([MN, MN2, MN3], axis=1)
@@ -164,7 +165,7 @@ class SuperPointDataset(Dataset):
         image_size: [w, h]
         """
         self.files = []
-        self.files += [train_path + f for f in os.listdir(train_path)]
+        self.files += [os.path.join(train_path, f) for f in os.listdir(train_path)]
         self.superpoint = SuperPoint(**sp_config)
         self.image_size = image_size
         self.transform = transform
@@ -179,7 +180,7 @@ class SuperPointDataset(Dataset):
         # warp image
         width, height = image.shape[:2]
         corners = np.array([[0, 0], [0, height], [width, 0], [width, height]], dtype=np.float32)
-        warp = np.random.randint(-224, 224, size=(4, 2)).astype(np.float32)
+        warp = np.random.randint(-76, 76, size=(4, 2)).astype(np.float32)
         M = cv2.getPerspectiveTransform(corners, corners + warp)
         warped = cv2.warpPerspective(src=image, M=M, dsize=(image.shape[1], image.shape[0]))  # return an image type
 
@@ -212,15 +213,15 @@ class SuperPointDataset(Dataset):
 
         # obtain the matching matrix of the image pair by the keypoint location
         kp1_projected = cv2.perspectiveTransform(kp1.reshape((1, -1, 2)), M)[0, :, :]
-        dists = cdist(kp1_projected, kp2)
+        dists = cdist(kp1_projected, kp2)  # [n_kp1, n_kp2]
 
-        min1 = np.argmin(dists, axis=0)
-        min2 = np.argmin(dists, axis=1)
+        min1 = np.argmin(dists, axis=0)  # [n_kp2]
+        min2 = np.argmin(dists, axis=1)  # [n_kp1]
 
-        min1v = np.min(dists, axis=1)
-        min1f = min2[min1v < 3]
+        min1v = np.min(dists, axis=1)  # [n_kp1]
+        min1f = min2[min1v < 3]  # depend (x, y) location
 
-        xx = np.where(min2[min1] == np.arange(min1.shape[0]))[0]
+        xx = np.where(min2[min1] == np.arange(min1.shape[0]))[0]  # mutual nearest
         matches = np.intersect1d(min1f, xx)
 
         missing1 = np.setdiff1d(np.arange(kp1.shape[0]), min1[matches])
@@ -232,14 +233,14 @@ class SuperPointDataset(Dataset):
         all_matches = np.concatenate([MN, MN2, MN3], axis=1)
 
         return {
-            'keypoints0': list(kp1),
-            'keypoints1': list(kp2),
-            'descriptors0': list(descs1),
-            'descriptors1': list(descs2),
-            'scores0': list(score1),
-            'scores1': list(score2),
+            'keypoints0': kp1.reshape(-1, 2),
+            'keypoints1': kp2.reshape(-1, 2),
+            'descriptors0': descs1.transpose(1, 0).reshape(256, -1),
+            'descriptors1': descs2.transpose(1, 0).reshape(256, -1),
+            'scores0': score1.reshape(-1),
+            'scores1': score2.reshape(-1),
             'image0': image,
             'image1': warped,
-            'all_matches': list(all_matches),
+            'all_matches': all_matches.transpose((1, 0)),
             'file_name': file_name
         }

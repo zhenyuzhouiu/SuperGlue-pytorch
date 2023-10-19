@@ -230,6 +230,11 @@ class SuperGlue(nn.Module):
             self.config['weights']))
 
     def forward(self, data):
+        """
+        data['keypoints0'] = [b, n_kps, 2] = data['keypoints1']
+        data['descriptors0'] = [b, 256, n_kps] = data['descriptors1']
+        data['scores0'] = [b, n_kps] = data['scores1']
+        """
         """Run SuperGlue on a pair of keypoints and descriptors"""
         desc0, desc1 = data['descriptors0'], data['descriptors1']
         kpts0, kpts1 = data['keypoints0'], data['keypoints1']
@@ -245,7 +250,7 @@ class SuperGlue(nn.Module):
             }
 
         file_name = data['file_name']
-        all_matches = data['all_matches'].permute(1, 2, 0)  # shape=torch.Size([1, 87, 2])
+        all_matches = data['all_matches']  # shape=torch.Size([1, 87, 2])
 
         # normalization keypoint
         kpts0 = normalize_keypoints(kpts0, data['image0'].shape)
@@ -288,7 +293,8 @@ class SuperGlue(nn.Module):
         for i in range(len(all_matches[0])):
             x = all_matches[0][i][0]
             y = all_matches[0][i][1]
-            loss.append(-torch.log(scores[0][x][y].exp()))  # check batch size == 1 ?
+            score = scores[0][x][y].exp()
+            loss.append(-torch.log(score))  # check batch size == 1 ?
         # for p0 in unmatched0:
         #     loss += -torch.log(scores[0][p0][-1])
         # for p1 in unmatched1:
@@ -301,6 +307,8 @@ class SuperGlue(nn.Module):
             'matches1': indices1,  # use -1 for invalid match
             'matching_scores0': mscores0,
             'matching_scores1': mscores1,
+            "mdesc0": mdesc0,
+            "mdesc1": mdesc1,
             'loss': loss_mean[0],
             'skip_train': False
         }

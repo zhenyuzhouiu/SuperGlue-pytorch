@@ -102,7 +102,7 @@ def parser_arguments():
         '--num_workers', type=int, default=0,
         help='num_workers')
     parser.add_argument(
-        '--train_path', type=str, default='/mnt/Data/PolyUFKVideo/Left/0001_L2/',
+        '--train_path', type=str, default='/mnt/Data/superpoint/data/FINGERKNUCKLE/Left/',
         help='Path to the directory of training imgs.')
     parser.add_argument(
         '--epoch', type=int, default=20,
@@ -154,10 +154,10 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(superglue.parameters(), lr=opt.learning_rate)
     mean_loss = []
 
+    superglue.train()
     # start training
     for epoch in range(1, opt.epoch + 1):
         epoch_loss = 0
-        superglue.train()
         for i, pred in enumerate(train_loader):
             for k in pred:
                 if k != 'file_name' and k != 'image0' and k != 'image1':
@@ -166,6 +166,9 @@ if __name__ == '__main__':
                     else:
                         pred[k] = Variable(torch.stack(pred[k]).cuda())
 
+            # pred["keypoints"] = [b, n_kps, 2]
+            # pred["descriptor"]= [b, 256, n_kps]
+            # pred["scores"] = [b, n_kps]
             data = superglue(pred)
             for k, v in pred.items():
                 pred[k] = v[0]
@@ -193,8 +196,8 @@ if __name__ == '__main__':
                 # Visualize the matches.
                 superglue.eval()
                 image0, image1 = pred['image0'].cpu().numpy()[0] * 255., pred['image1'].cpu().numpy()[0] * 255.
-                kpts0, kpts1 = pred['keypoints0'].cpu().numpy()[0], pred['keypoints1'].cpu().numpy()[0]
-                matches, conf = pred['matches0'].cpu().detach().numpy(), pred['matching_scores0'].cpu().detach().numpy()
+                kpts0, kpts1 = pred['keypoints0'].cpu().numpy(), pred['keypoints1'].cpu().numpy()
+                matches, conf = pred['matches0'].cpu().detach().numpy().reshape(-1), pred['matching_scores0'].cpu().detach().numpy().reshape(-1)
                 image0 = read_image_modified(image0, opt.resize, opt.resize_float)
                 image1 = read_image_modified(image1, opt.resize, opt.resize_float)
                 valid = matches > -1
