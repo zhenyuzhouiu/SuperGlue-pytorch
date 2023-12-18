@@ -146,6 +146,7 @@ def parser_arguments():
     parser.add_argument(
         '--epoch', type=int, default=2000,
         help='Number of epoches')
+    parser.add_argument('--device', type=str, default="cuda:0")
 
     return parser.parse_args()
 
@@ -163,11 +164,7 @@ def train(opt, writer):
             'match_threshold': opt.match_threshold,
         }
     }
-
-    if torch.cuda.is_available():
-        device = "cuda:0"
-    else:
-        device = "cpu"
+    device = opt.device
 
     # load training data
     train_set = SPBatchDataset(opt.train_path, sp_config=config.get('superpoint', {}),
