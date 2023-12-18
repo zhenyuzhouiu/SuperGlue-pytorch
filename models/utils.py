@@ -436,6 +436,7 @@ def plot_image_pair(imgs, dpi=100, size=6, pad=.5):
         for spine in ax[i].spines.values():  # remove frame
             spine.set_visible(False)
     plt.tight_layout(pad=pad)
+    plt.show()
 
 
 def plot_keypoints(kpts0, kpts1, color='w', ps=2):

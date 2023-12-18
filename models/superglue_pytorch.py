@@ -222,13 +222,6 @@ class SuperGlue(nn.Module):
         bin_score = torch.nn.Parameter(torch.tensor(1.))
         self.register_parameter('bin_score', bin_score)
 
-        assert self.config['weights'] in ['indoor', 'outdoor']
-        path = Path(__file__).parent
-        path = path / 'weights/superglue_{}.pth'.format(self.config['weights'])
-        self.load_state_dict(torch.load(str(path)))
-        print('Loaded SuperGlue model (\"{}\" weights)'.format(
-            self.config['weights']))
-
     def forward(self, data):
         """
         data['keypoints0'] = [b, n_kps, 2] = data['keypoints1']
@@ -293,12 +286,13 @@ class SuperGlue(nn.Module):
         for i in range(len(all_matches[0])):
             x = all_matches[0][i][0]
             y = all_matches[0][i][1]
-            score = scores[0][x][y].exp()
+            score = scores[0][x][y].exp() + 1e-10  # score from [0, 1] 1e-10 for avoiding inf
             loss.append(-torch.log(score))  # check batch size == 1 ?
         # for p0 in unmatched0:
         #     loss += -torch.log(scores[0][p0][-1])
         # for p1 in unmatched1:
         #     loss += -torch.log(scores[0][-1][p1])
+
         loss_mean = torch.mean(torch.stack(loss))
         loss_mean = torch.reshape(loss_mean, (1, -1))
 

@@ -1,8 +1,8 @@
 import torch
 
-superglue = torch.load("./model_epoch_1.pth")
+superglue = torch.load("/home/zhenyu/Desktop/OpenSource/SuperGlue-pytorch/checkpoint/10-22-17-23-04/model_epoch_best.pth")
 
 superglue = superglue.eval()
 superglue = superglue.cpu()
-ckpt_model_filename = "./sg_fingerknuckle_v1.pth"
+ckpt_model_filename = "/home/zhenyu/Desktop/OpenSource/SuperGlue-pytorch/checkpoint/10-22-17-23-04/sg_fk-best.pth"
 torch.save(superglue.state_dict(), ckpt_model_filename)

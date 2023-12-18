@@ -96,16 +96,16 @@ class SuperPoint(nn.Module):
         c = self.conf.channels[-1]
         self.detector = nn.Sequential(
             VGGBlock(channels[-1], c, 3),
-            VGGBlock(c, self.stride**2 + 1, 1, relu=False),
+            VGGBlock(c, self.stride ** 2 + 1, 1, relu=False),
         )
         self.descriptor = nn.Sequential(
             VGGBlock(channels[-1], c, 3),
             VGGBlock(c, self.conf.descriptor_dim, 1, relu=False),
         )
 
-        path = Path(__file__).parent / 'weights/sp_fingerknucklev2.pth'
+        path = Path(__file__).parent / 'weights/sp_fkleftv3-2100000.pth'
         self.load_state_dict(torch.load(str(path)))
-        print('Loaded SuperPoint model weights')
+        print('Loaded SuperPoint model weights from ' + str(path))
 
     def forward(self, data):
         image = data["image"]
