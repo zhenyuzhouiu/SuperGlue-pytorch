@@ -5,3 +5,4 @@
 *.zip
 *._.DS_Store
 dump_match_pairs/
+./checkpoint
