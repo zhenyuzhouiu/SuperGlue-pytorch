@@ -596,7 +596,7 @@ class SPPairDataset(Dataset):
         image_size,
         device,
         p_augment, # probability of data augmentation
-        p_sameid, # probability of the image pair from different samples of the same identity
+        p_sameid = 0.5, # probability of the image pair from different samples of the same identity
         transform=transforms.Compose([transforms.ToTensor()]),
         no_sample=20
     ):
@@ -680,7 +680,7 @@ class SPPairDataset(Dataset):
             sample_i = id % self.no_sample
             sample_list = [i for i in range(20)]
             sample_list.remove(sample_i)
-            sample_i = random.sample(sample_list)
+            sample_i = random.sample(sample_list, 1)[0]
             file_name2 = os.path.join(os.path.dirname(file_name), str(id_i * self.no_sample + sample_i) + '.jpg')
             if not os.path.exists(file_name2):
                 file_name2 = ''

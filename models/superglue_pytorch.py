@@ -287,7 +287,7 @@ class SuperGlue(nn.Module):
             x = all_matches[0][i][0]
             y = all_matches[0][i][1]
             score = scores[0][x][y].exp() + 1e-10  # score from [0, 1] 1e-10 for avoiding inf
-            loss.append(-torch.log(score))  # check batch size == 1 ?
+            loss.append(-torch.log(score))  # the loss will be zero when the score is near to 1
         # for p0 in unmatched0:
         #     loss += -torch.log(scores[0][p0][-1])
         # for p1 in unmatched1:

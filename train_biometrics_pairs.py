@@ -22,7 +22,7 @@ import torch.multiprocessing
 from torch.autograd import Variable
 
 from torch.utils.data import DataLoader
-from data.load_data import SuperPointDataset
+from data.load_data import SPPairDataset
 from models.superglue_pytorch import SuperGlue
 from models.utils import make_matching_plot, read_image_modified
 from torch.utils.tensorboard import SummaryWriter
@@ -63,7 +63,7 @@ def parser_arguments():
     parser.add_argument(
         "--keypoint_threshold",
         type=float,
-        default=0.10,
+        default=0.01,
         help="SuperPoint keypoint detector confidence threshold",
     )
     parser.add_argument(
@@ -98,6 +98,7 @@ def parser_arguments():
     )
 
     parser.add_argument("--p_augment", type=float, default=0.1)
+    parser.add_argument("--p_sameid", type=float, default=0.5)
 
     parser.add_argument(
         "--cache",
@@ -159,7 +160,7 @@ def parser_arguments():
         "--eval_step", type=int, default=100, help="the step size for visualization"
     )
     parser.add_argument(
-        "--learning_rate", type=int, default=0.0001, help="Learning rate"
+        "--learning_rate", type=float, default=0.0001, help="Learning rate"
     )
     parser.add_argument("--batch_size", type=int, default=1, help="batch_size")
     parser.add_argument("--num_workers", type=int, default=0, help="num_workers")
@@ -241,16 +242,17 @@ def train(opt, writer):
         device = "cpu"
 
     # load training data
-    train_set = SuperPointDataset(
+    train_set = SPPairDataset(
         opt.train_path,
         sp_config=config.get("superpoint", {}),
         image_size=opt.resize,
         device=device,
         p_augment=opt.p_augment,
+        p_sameid=opt.p_sameid
     )
     train_loader = DataLoader(
         dataset=train_set,
-        shuffle=False,
+        shuffle=True,
         batch_size=opt.batch_size,
         num_workers=opt.num_workers,
         drop_last=True,
@@ -278,9 +280,11 @@ def train(opt, writer):
     mean_loss = []
 
     superglue.train()
+    best_loss = float('inf')
     # start training
     for epoch in range(1, opt.epoch + 1):
         epoch_loss = 0
+        num_updates = 0
         loop = tqdm(
             enumerate(train_loader),
             desc="Epoch {}/{}".format(epoch, opt.epoch),
@@ -308,79 +312,75 @@ def train(opt, writer):
             # process loss
             Loss = pred["loss"]
             epoch_loss += Loss.item()
-            mean_loss.append(Loss)
+            num_updates += 1
+            mean_loss.append(Loss.item())
 
             # superglue.zero_grad()
             optimizer.zero_grad()
             Loss.backward()
             optimizer.step()
 
-            scheduler.step(epoch - 1)
-            writer.add_scalar(
-                "lr",
-                scalar_value=optimizer.param_groups[0]["lr"],
-                global_step=(epoch - 1) * len(train_loader) + i,
-            )
+           
             writer.add_scalar(
                 "iter_loss",
                 scalar_value=Loss.item(),
                 global_step=(epoch - 1) * len(train_loader) + i,
             )
             loop.set_postfix({"iter_loss": "{:.6f}".format(Loss.item())})
+            with torch.no_grad():
+                # for every eval_step images, print progress and visualize the matches
+                if (i + 1) % opt.eval_step == 0:
+                    ### eval ###
+                    # Visualize the matches.
+                    superglue.eval()
+                    image0, image1 = (
+                        pred["image0"].cpu().numpy()[0] * 255.0,
+                        pred["image1"].cpu().numpy()[0] * 255.0,
+                    )
+                    kpts0, kpts1 = (
+                        pred["keypoints0"].cpu().numpy(),
+                        pred["keypoints1"].cpu().numpy(),
+                    )
+                    matches, conf = pred["matches0"].cpu().detach().numpy().reshape(
+                        -1
+                    ), pred["matching_scores0"].cpu().detach().numpy().reshape(-1)
+                    image0 = read_image_modified(image0, opt.resize, opt.resize_float)
+                    image1 = read_image_modified(image1, opt.resize, opt.resize_float)
+                    valid = matches > -1
+                    mkpts0 = kpts0[valid]
+                    mkpts1 = kpts1[matches[valid]]
+                    mconf = conf[valid]
+                    viz_path = opt.eval_output_dir / "{}_matches.{}".format(
+                        str(i), opt.viz_extension
+                    )
+                    color = cm.jet(mconf)
+                    stem = pred["file_name"]
+                    text = []
+                    make_matching_plot(
+                        image0,
+                        image1,
+                        kpts0,
+                        kpts1,
+                        mkpts0,
+                        mkpts1,
+                        color,
+                        text,
+                        viz_path,
+                        stem,
+                        stem,
+                        opt.show_keypoints,
+                        opt.fast_viz,
+                        opt.opencv_display,
+                        "Matches",
+                    )
 
-            # for every eval_step images, print progress and visualize the matches
-            if (i + 1) % opt.eval_step == 0:
-                ### eval ###
-                # Visualize the matches.
-                superglue.eval()
-                image0, image1 = (
-                    pred["image0"].cpu().numpy()[0] * 255.0,
-                    pred["image1"].cpu().numpy()[0] * 255.0,
-                )
-                kpts0, kpts1 = (
-                    pred["keypoints0"].cpu().numpy(),
-                    pred["keypoints1"].cpu().numpy(),
-                )
-                matches, conf = pred["matches0"].cpu().detach().numpy().reshape(
-                    -1
-                ), pred["matching_scores0"].cpu().detach().numpy().reshape(-1)
-                image0 = read_image_modified(image0, opt.resize, opt.resize_float)
-                image1 = read_image_modified(image1, opt.resize, opt.resize_float)
-                valid = matches > -1
-                mkpts0 = kpts0[valid]
-                mkpts1 = kpts1[matches[valid]]
-                mconf = conf[valid]
-                viz_path = opt.eval_output_dir / "{}_matches.{}".format(
-                    str(i), opt.viz_extension
-                )
-                color = cm.jet(mconf)
-                stem = pred["file_name"]
-                text = []
-                make_matching_plot(
-                    image0,
-                    image1,
-                    kpts0,
-                    kpts1,
-                    mkpts0,
-                    mkpts1,
-                    color,
-                    text,
-                    viz_path,
-                    stem,
-                    stem,
-                    opt.show_keypoints,
-                    opt.fast_viz,
-                    opt.opencv_display,
-                    "Matches",
-                )
-
-                writer.add_scalar(
-                    "mean_loss",
-                    scalar_value=torch.mean(torch.stack(mean_loss)).item(),
-                    global_step=((epoch - 1) * len(train_loader) + i) // opt.eval_step,
-                )
-                mean_loss = []
-                superglue.train()
+                    writer.add_scalar(
+                        "mean_loss",
+                        scalar_value=torch.mean(torch.stack(mean_loss)).item(),
+                        global_step=((epoch - 1) * len(train_loader) + i) // opt.eval_step,
+                    )
+                    mean_loss = []
+                    superglue.train()
 
             # process checkpoint for every checkpoint_step images
             if (i + 1) % opt.checkpoint_step == 0:
@@ -389,9 +389,14 @@ def train(opt, writer):
                 )
                 save_ckpt(model=superglue, checkpoint_dir=model_out_path, device=device)
 
+        scheduler.step()
+        writer.add_scalar(
+            "lr",
+            scalar_value=optimizer.param_groups[0]["lr"],
+            global_step=(epoch - 1) * len(train_loader) + i,
+        )
         # save checkpoint when an epoch finishes, we should save the best ckpt and last ckpt
-        best_loss = 1e5
-        epoch_loss /= len(train_loader)
+        epoch_loss = epoch_loss / max(1, num_updates)
         writer.add_scalar("epoch_loss", scalar_value=epoch_loss, global_step=epoch)
         model_out_path = os.path.join(
             opt.checkpoint_dir, "model_epoch_{}.pth".format("last")
@@ -430,7 +435,7 @@ if __name__ == "__main__":
     # checkpoint directory
     this_datetime = datetime.datetime.now().strftime("%m-%d-%H-%M-%S")
     opt.checkpoint_dir = os.path.join(
-        opt.checkpoint_dir, "{}-One".format(this_datetime)
+        opt.checkpoint_dir, "diffpalm-" + "{}".format(this_datetime) + "-pair" + "-{}".format(opt.keypoint_threshold)
     )
     print("[*] Target Checkpoint Path: {}".format(opt.checkpoint_dir))
     if not os.path.exists(opt.checkpoint_dir):

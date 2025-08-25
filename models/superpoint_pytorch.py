@@ -103,7 +103,7 @@ class SuperPoint(nn.Module):
             VGGBlock(c, self.conf.descriptor_dim, 1, relu=False),
         )
 
-        path = Path(__file__).parent / 'weights/sp_fingernail-908578.pth'
+        path = Path(__file__).parent / 'weights/sp_diffpalm_4100000.pth' # this should be change
         self.load_state_dict(torch.load(str(path)))
         print('Loaded SuperPoint model weights from ' + str(path))
 
@@ -170,3 +170,4 @@ class SuperPoint(nn.Module):
             "scores": scores,
             "descriptors": descriptors,
         }
+
